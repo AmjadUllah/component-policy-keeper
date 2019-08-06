@@ -46,11 +46,20 @@ def perform_service_scaling(policy,service_name):
         config = pk_config.config()
         k8s.scale_k8s_deploy(config['k8s_endpoint'],service_name,containercount)
 
+def get_instances_value(property_value, output_variable):
+  if property_value.isdigit()==True:
+    return int(property_value)
+  else:
+    result = evaluator.evaluate(property_value, output_variables=[output_variable])
+    return int(result[output_variable])
+
 def perform_worker_node_scaling(node):
   if 'm_node_count' in node.get('outputs',dict()):
+    min_ins = get_instances_value(node['min_instances'],"min_instances")
+    max_ins = get_instances_value(node['max_instances'],"max_instances")
     log.debug('(S) Scaling values for {3}: min:{0} max:{1} calculated:{2}'
-             .format(node['min_instances'],node['max_instances'],node['outputs']['m_node_count'],node['name']))
-    nodecount = max(min(int(node['outputs']['m_node_count']),int(node['max_instances'])),int(node['min_instances']))
+             .format(min_ins,max_ins,node['outputs']['m_node_count'],node['name']))
+    nodecount = max(min(int(node['outputs']['m_node_count']),max_ins),min_ins)
     config = pk_config.config()
     occo.scale_worker_node(
         endpoint=config['occopus_endpoint'],
@@ -205,7 +214,9 @@ def collect_inputs_for_nodes(policy, node):
   config = pk_config.config()
   inputs['m_nodes']=k8s.query_list_of_nodes(config['k8s_endpoint'], node['name'])
   mnc = node.get('outputs',dict()).get('m_node_count',None)
-  inputs['m_node_count'] = max(min(int(mnc),int(node['max_instances'])),int(node['min_instances'])) if mnc else int(node['min_instances'])
+  min_ins = get_instances_value(node['min_instances'],"min_instances")
+  max_ins = get_instances_value(node['max_instances'],"max_instances")
+  inputs['m_node_count'] = max(min(int(mnc),max_ins),min_ins) if mnc else min_ins
 
   prev_node_count = node.get('inputs',dict()).get('m_node_count',None)
   prev_nodes = node.get('inputs',dict()).get('m_nodes',None)
@@ -247,8 +258,10 @@ def collect_inputs_for_containers(policy,service_name):
         if not theservice.get('hosts') or node['name'] in theservice.get('hosts', []):
           inputs['m_nodes']+=k8s.query_list_of_nodes(config['k8s_endpoint'], node['name'])
           mnc += int(node.get('outputs',dict()).get('m_node_count',None))
-          mini += int(node['min_instances'])
-          maxi += int(node['max_instances'])
+          min_ins = get_instances_value(node['min_instances'],"min_instances")
+          max_ins = get_instances_value(node['max_instances'],"max_instances")
+          mini += min_ins
+          maxi += max_ins
       inputs['m_node_count'] = max(min(int(mnc),int(maxi)),int(mini)) if mnc else int(mini)
       mcc = theservice.get('outputs',dict()).get('m_container_count',None)
       inputs['m_container_count'] = max(min(int(mcc),int(theservice['max_instances'])),int(theservice['min_instances']))\
