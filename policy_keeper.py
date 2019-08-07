@@ -47,9 +47,9 @@ def perform_service_scaling(policy,service_name):
         k8s.scale_k8s_deploy(config['k8s_endpoint'],service_name,containercount)
 
 def get_instances_value(property_value, output_variable):
-  if property_value.isdigit()==True:
+  try:
     return int(property_value)
-  else:
+  except ValueError:
     result = evaluator.evaluate(property_value, output_variables=[output_variable])
     return int(result[output_variable])
 
